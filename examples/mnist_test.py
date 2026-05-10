@@ -10,7 +10,6 @@ import numpy as np
 from sklearn.datasets import fetch_openml
 from sklearn.utils import shuffle
 
-
 print('fetching...')
 mnist = fetch_openml('mnist_784', version=1, return_X_y=True, as_frame=False)
 
@@ -18,10 +17,8 @@ x, t = mnist
 x = x / np.max(x) # normalization
 
 x, t = shuffle(x, t, random_state=42)
+x = x.reshape((len(x), 1, 28, 28)) # to 3D
 
-# x = x.reshape((70000, 1, 28, 28)) # to 3D
-
-# convert the dataset into one-hot datapoints
 y = []
 for n in t:
     nodes = [0] * 10
@@ -33,13 +30,14 @@ print("[mnist] is fetched.")
 
 # neural network setups
 cnn = nn(
-            # Conv(kernels=[(3, 3)], stride=2, padding=1),
-            # Conv(kernels=[(7, 7)], stride=3, padding=1),
-            # Pooling((3, 3), "max"),
+            Conv(k_shape=(3, 3), n_kernels=2, initializer_w=he_normal),
+            MaxPool((2, 2)),
+            Conv(k_shape=(3, 3), n_kernels=4, initializer_w=he_normal),
+            MaxPool((2, 2)),
             Flatten(),
-            Dense(16, ReLU),
-            Dense(16, ReLU),
-            Dense(10, softmax),
+            Dense(128, ReLU, initializer_w=he_normal),
+            # Dense(16, ReLU),
+            Dense(10, softmax, initializer_w=he_normal),
             possible_outcomes=['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
             cost= CCE,
             optimizer= Adam(lr=0.001)
@@ -47,7 +45,7 @@ cnn = nn(
 
 # data split
 n = int(0.85 * len(x))
-batch_size, epochs = 128, 8
+batch_size, epochs = 128, 10
 xtrain, ytrain, ttrain, xtest, ytest, ttest = x[:n], y[:n], t[:n], x[n:], y[n:], t[n:]  
 
 # train

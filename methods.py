@@ -27,89 +27,6 @@ def align_and_pad(x_shape, k_shape, stride):
     
     return (u, d), (l, r)
 
-def cross_corr(x, k, stride=1, pad=0, auto_pad=False):
-    global images
-    if pad:
-        x = np.pad(x, pad_width=pad, mode="constant")
-    
-    if auto_pad:
-        pad = align_and_pad(x.shape, k.shape, stride)
-        x = np.pad(x, pad_width=pad, mode='constant')
-
-    row_choices = x.shape[0] - k.shape[0] + 1
-    col_choices = x.shape[1] - k.shape[1] + 1
-    
-    feature_map = []
-
-    for i in range(0, row_choices, stride):
-        row = []
-        for j in range(0, col_choices, stride):
-            z = x[i : i + k.shape[0], j : j + k.shape[1]] * k
-            row.append(np.sum(z))
-        feature_map.append(row)
-
-    images += [x, feature_map]
-
-    return np.array(feature_map, dtype=float)
-
-def cross_corr_transposed(x, k, output_size, stride=1, pad=0, auto_pad=False):
-    global images
-    if pad:
-        x = np.pad(x, pad_width=pad, mode="constant")
-    
-    if auto_pad:
-        pad = align_and_pad(x.shape, output_size, stride)
-        x = np.pad(x, pad_width=pad, mode='constant')
-    
-    n_row, n_col = output_size
-    shift_row = x.shape[0] - n_row + 1
-    shift_col = x.shape[1] - n_col + 1
-    de_feature_map = []
-    for i in range(n_row):
-        row = []
-        for j in range(n_col):
-            z = x[i : i + shift_row : stride, j : j + shift_col : stride] * k
-            row.append(np.sum(z))
-        de_feature_map.append(row)
-
-    images += [x, de_feature_map]
-
-    return np.array(de_feature_map, dtype=float)
-
-def convolve(x, k, stride=1, pad=0, auto_pad=False):
-    return cross_corr(x, k[:, ::-1], stride, pad, auto_pad)
-
-def conv_transposed(x, k, output_size, stride=1, pad=0):
-    global images
-    k_h = k.shape[0] * stride
-    k_w = k.shape[1] * stride
-    n_row, n_col = output_size
-    
-    if pad == 'full':
-        pad = (k_h - 1, k_h - 1), (k_w - 1, k_w - 1)
-        x = np.pad(x, pad_width=pad, mode="constant")
-    elif pad:
-        x = np.pad(x, pad_width=pad, mode="constant")
-
-    k = k[::-1, ::-1] # rotate k by 180 degrees
-    row_bound, col_bound = x.shape[0] - k_h + 1, x.shape[1] - k_w + 1 # cutoff value
-
-    feature_map = []
-    for i in range(n_row):
-        row = []
-        for j in range(n_col):
-            if i > row_bound or j > col_bound:
-                row.append(0)
-            else:
-                z = x[i : i + k_h : stride, j : j + k_w : stride] * k
-                row.append(z.sum())
-        feature_map.append(row)
-
-    images += [x, feature_map]
-
-    return np.array(feature_map, dtype=float)
-
-
 # initializers
 def he_normal(n_in, n_out, rng=np.random):
     std = np.sqrt(2.0 / n_in)
@@ -127,11 +44,8 @@ def glorot_uniform(n_in, n_out, rng=np.random):
     limit = np.sqrt(6.0 / (n_in + n_out))
     return rng.uniform(-limit, limit, size=(n_out, n_in))
 
-def zeros(n_out):
-    return np.zeros((n_out,))
-
-def zeros_map(x, y):
-    return np.zeros((x, y))
+def zeros(shape):
+    return np.zeros(shape)
 
 # activations
 def sigmoid(vec):
