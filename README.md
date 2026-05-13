@@ -23,6 +23,12 @@ cmake --build build
 ```
 This will create the necessary `.pyd` file.  
 
+After that, run:  
+```
+python -m __init__
+```
+To check that everything is working.  
+
 # Usage
 
 Import the modules:  
@@ -79,3 +85,10 @@ cnn = nn(
 
 > [!WARNING]
 > Convolution and pooling operations are not yet fully optimized and may run slower than usual.  
+
+---
+
+For more examples, you may refer to `mnist_test.py` in `examples` and run it using:  
+```bash
+python -m examples.test
+```
