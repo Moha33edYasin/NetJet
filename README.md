@@ -9,9 +9,30 @@ The framework emphasizes **modularity, transparency, and user control**, enablin
 To develop a first-principles understanding of neural network behavior rather than relying on high-level libraries.  
 Re-implementing core mechanisms provides deeper insight into learning dynamics, gradient flow, and architectural design trade-offs.  
 
+# Setup
+
+**Requirements**:  
+- C++20  
+- CMake  
+- pybind11  
+
+Then, type:  
+```bash
+cmake -S src -B build
+cmake --build build
+```
+This will create the necessary `.pyd` file.  
+
+After that, run:  
+```
+python -m __init__
+```
+To check that everything is working.  
+
 # Usage
 
 Import the modules:  
+
 ```python
 from netjet.models import *
 from netjet.methods import *
@@ -64,3 +85,10 @@ cnn = nn(
 
 > [!WARNING]
 > Convolution and pooling operations are not yet fully optimized and may run slower than usual.  
+
+---
+
+For more examples, you may refer to `mnist_test.py` in `examples` and run it using:  
+```bash
+python -m examples.test
+```
