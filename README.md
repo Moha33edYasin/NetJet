@@ -14,7 +14,8 @@ Re-implementing core mechanisms provides deeper insight into learning dynamics, 
 **Requirements**:  
 - C++20  
 - CMake  
-- pybind11  
+- pybind11
+- Eigen 5.0.0
 
 Then, type:  
 ```bash
@@ -81,7 +82,7 @@ cnn = nn(
 )
 ```  
 > [!NOTE]
-> With `8 epochs` and a `batch size` of `128`, The above structure achieved `~0.97-0.97.5` testing accuarcy on MNIST.  
+> With `8 epochs` and a `batch size` of `128`, The above structure achieved `~0.97-0.97.6` testing accuarcy on MNIST.  
 
 > [!WARNING]
 > Convolution and pooling operations are not yet fully optimized and may run slower than usual.  
@@ -90,5 +91,5 @@ cnn = nn(
 
 For more examples, you may refer to `mnist_test.py` in `examples` and run it using:  
 ```bash
-python -m examples.test
+python -m examples.mnist_test
 ```
