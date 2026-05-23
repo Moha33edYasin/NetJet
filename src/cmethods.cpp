@@ -353,12 +353,10 @@ public:
         #pragma omp parallel for
         for (int i = 0; i < a0; i++) {
             for (int x = b2 - 1; x >= 0; x--) {
-                // const int xs_ms = (1 - b2 + x) * s;
                 const int xs = x * s;
                 int i2dim0_ = i * bslice_size + x * b3;
 
                 for (int y = b3 - 1; y >= 0; y--) { 
-                    // const int ys_ms = (1 - b3 + y) * s;
                     float *i2_dim0 = im2col_ptr + (i2dim0_ + y) * im2col1;
                     int i2idx1 = 0;
 
@@ -367,7 +365,6 @@ public:
                         const int adim2 = (i * a1 + j) * a2;
 
                         for (int k = 0; k < out_h; k++) {
-                            // const int km = k + xs_ms;
                             const int km = k - xs;
                             
                             if (km < 0 || km >= a2) {
@@ -379,8 +376,6 @@ public:
 
                                 int ys = y * s;
                                 const float *a_dim3 = a_ptr + (adim2 + km) * a3;
-                            
-                                // const int out_left = (b3 - y - 1) * s;
                                 const int out_right = out_w - ys - a3;
 
                                 for (int u = 0; u < 3; u++) {
@@ -417,22 +412,7 @@ public:
                                         break;
                                     }
                                 }
-                                /*
-                                    for (int w = 0; w < out_w; w++) {
-                                    const int wm = w - ys;
-                                    if (wm < 0 || wm >= a3) {
-                                        
-                                        i2_dim0[i2idx1++] = 0;
-                                        
-                                    } else {
-
-                                        i2_dim0[i2idx1++] = a_dim3[wm];
-                                        
-                                    }
-                                }
-                                */
                             }
-                            
                         }
                     }
                 }
