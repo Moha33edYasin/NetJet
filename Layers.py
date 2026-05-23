@@ -1,6 +1,7 @@
 import numpy as np
 from methods import align_and_pad, derivatives, ReLU, glorot_uniform, zeros 
 from build import cmethods
+from methods import images, show_grid
 
 ### Allocating Layer ###
 
@@ -32,8 +33,8 @@ class Reshape():
         return self.a
 
     # 3D | 2D | 1D tensor <-- 3D | 2D | 1D tensor
-    def backward_pass(self, dz_next):
-        return dz_next.reshape(dz_next.shape[0], *self.original_shape)
+    def backward_pass(self, dz):
+        return dz.reshape(dz.shape[0], *self.original_shape)
 
 # 4D | 3D tensor --> 2D tensor
 class Flatten():
@@ -44,7 +45,7 @@ class Flatten():
         self.n = 0
         self.a = None
         self.z = None
-    
+
     # 3D | 2D tensor --> 1D tensor
     def forward_pass(self, previous):
         self.previous = previous
@@ -56,8 +57,8 @@ class Flatten():
         return self.a
     
     # 3D | 2D tensor <-- 1D tensor
-    def backward_pass(self, dz_next):
-        return dz_next.reshape(dz_next.shape[0], *self.original_shape)
+    def backward_pass(self, dz):
+        return dz.reshape(dz.shape[0], *self.original_shape)
 
 
 ### Trainable Layers ###
@@ -135,6 +136,16 @@ class Conv():
         self.a = None
         self.padded_input = None
 
+        # wrappers
+        self.x4d = None
+        self.xT4d = None
+        self.cT4d = None
+
+        # capcities
+        self.x4d_capcity = None
+        self.xT4d_capcity = None
+        self.cT4d_capcity = None
+
     # 3D tensor --> 3D tensor
     def forward_pass(self, previous):
         self.previous = previous
@@ -157,13 +168,21 @@ class Conv():
         # This corrects the input boundaries to align with kernel shape,
         # so that the kernel will cover all the input with the least padding 
         # room possible.
-        (u, d), (l, r) = align_and_pad((height, width), self.w[0][0].shape, self.stride)
+        (u, d), (l, r) = align_and_pad((height, width), self.k_shape, self.stride)
         pad_width = (0, 0), (0, 0), (u + self.pad, d + self.pad), (l + self.pad, r + self.pad)
 
         self.padded_input = np.pad(self.previous.a, pad_width, mode='constant')
-
-        out = cmethods.cross_corr4D(self.padded_input, self.w, self.stride)
         
+        if self.x4d is None:
+            self.x4d = cmethods.I2x_corr4D(*self.padded_input.shape, *self.w.shape, self.stride)
+            self.x4d_capcity = self.padded_input.shape
+
+        elif self.padded_input.shape != self.x4d_capcity:
+            self.x4d.alloc(*self.padded_input.shape, *self.w.shape, self.stride)
+            self.x4d_capcity = self.padded_input.shape
+            
+        out = self.x4d.cal(self.padded_input, self.w)
+
         # initialize baises
         if self.b is None:
             self.b = self.f_b(out.shape[1:])
@@ -176,13 +195,29 @@ class Conv():
     def calculate_gradient(self, dz):
         # calculate the loss gradient with respect to the
         # weights and the biases for convolutional layer
-        dw = cmethods.cross_corrTransposed4D(dz, self.padded_input, *self.k_shape, self.stride)     
+        if self.xT4d is None:
+            self.xT4d = cmethods.I2x_corrT4D(*self.padded_input.shape, *dz.shape, *self.k_shape, self.stride)
+            self.xT4d_capcity = dz.shape
+
+        elif dz.shape != self.xT4d_capcity:
+            self.xT4d.alloc(*self.padded_input.shape, *dz.shape, *self.k_shape, self.stride)
+            self.xT4d_capcity = dz.shape
+
+        dw = self.xT4d.cal(self.padded_input, dz)
         db = np.sum(dz, axis=0)
         return dw, db
 
     # 3D tensor <-- 3D tensor
-    def backward_pass(self, dz_next):
-        da = cmethods.convTransposed4D(dz_next, self.w, *self.previous.a.shape[2:], self.stride) # full padding
+    def backward_pass(self, dz):
+        if self.cT4d is None:
+            self.cT4d = cmethods.I2x_convT4D(*self.w.shape, *dz.shape, *self.previous.a.shape[2:], self.stride)
+            self.cT4d_capcity = dz.shape
+        
+        elif dz.shape != self.cT4d_capcity:
+            self.cT4d.alloc(*self.w.shape, *dz.shape, *self.previous.a.shape[2:], self.stride)
+            self.cT4d_capcity = dz.shape
+
+        da = self.cT4d.cal(self.w, dz)
         return da * self.previous.df(self.previous.z)
 
 

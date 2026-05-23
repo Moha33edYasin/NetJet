@@ -106,7 +106,7 @@ class nn():
                 y = np.stack(y)
 
                 self.feedforward(x)
-                loss += self.loss(y).sum() / batch_size
+                loss += self.loss(y).sum() / y.shape[0]
                 gW, gB = self.backprop(y)
                 n_correct += np.count_nonzero(self.output() == t)
                 
