@@ -1,27 +1,5 @@
 import numpy as np
 
-images = [0, 0, 0, 0, 0, 0]
-
-# stuff
-import matplotlib.pyplot as plt
-
-def show_grid(images, info_show=False):
-    fig, axes = plt.subplots(len(images) // 2, 2, figsize=(10, 10))
-    for i, ax in enumerate(axes.flat):
-        if i < len(images):
-            ax.imshow(images[i], cmap="gray")
-            if info_show:
-                for k in range(images[i].shape[0]):
-                    for j in range(images[i].shape[1]):
-                        # Center the text on each pixel (j=x, i=y)
-                        ax.text(j, k, str(images[i][k, j]), color='red', 
-                                ha='center', va='center', fontsize=8)
-            ax.axis('off')
-        else:
-            ax.axis('off') # Hide unused subplots
-    plt.tight_layout()
-    plt.show()
-
 # math operations
 def align_and_pad(x_shape, k_shape, stride):
     u, d, l, r = 0, 0, 0, 0 # up, down, left, right padding
