@@ -43,12 +43,6 @@ protected:
 
     I2x4D()=default;
 
-    // I2x4D(int a_s0, int a_s1, int a_s2, int a_s3, 
-    //       int b_s0, int b_s1, int b_s2, int b_s3, int s) 
-    // : a0(a_s0), a1(a_s1), a2(a_s2), a3(a_s3),
-    //   b0(b_s0), b1(b_s1), b2(b_s2), b3(b_s3),
-    //   s(s) {}
-
     void allocate(int a_s0, int a_s1, int a_s2, int a_s3, 
                   int b_s0, int b_s1, int b_s2, int b_s3, int _s) {
         a0 = a_s0; a1 = a_s1; a2 = a_s2; a3 = a_s3; 
