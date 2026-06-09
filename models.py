@@ -116,7 +116,7 @@ class nn():
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
             (acc_line_b,) = ax1.plot([], [], "-b", label="Accuracy per Batch")
             (loss_line_b,) = ax1.plot([], [], "--y", label="Loss per Batch")
-            (acc_line_e,) = ax2.plot([], [], "o-r", label="Accuracy per Epoch")
+            (acc_line_e,) = ax2.plot([], [], "-r", label="Accuracy per Epoch")
 
             fig.autofmt_xdate()
 

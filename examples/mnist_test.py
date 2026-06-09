@@ -35,7 +35,8 @@ def get_mnist():
     return x, y, t
 
 x, y, t = get_mnist()
-# neural network setups
+
+# neural network setup
 cnn = nn(
     
         Conv(k_shape=(3, 3), n_kernels=4, activation=ReLU),
@@ -61,14 +62,15 @@ n = int(0.85 * len(x))
 xtrain, ytrain, ttrain, xtest, ytest, ttest = x[:n], y[:n], t[:n], x[n:], y[n:], t[n:]  
 
 print('training...')
-acc1 = cnn.learn(xtrain, ytrain, ttrain, epochs=10)
+acc1 = cnn.learn(xtrain, ytrain, ttrain, epochs=8, Debug_plot=False)
 
 print("testing...")
 loss2, acc2 = cnn.test(xtest, ytest, ttest)
 
-# single-input test
+# manual-input test
 i = 0
+cnn.resize_batch(1)
 while isinstance(i, int) and i < len(xtest):
-    i = int(input(f'index({len(ttest) - 1}):'))
+    i = int(input(f'Enter index (<= {len(ttest) - 1}):'))
     cnn.feedforward(xtest[i].reshape(1, 1, 28, 28))
-    print(cnn.output(), ttest[i])
+    print("         CNN answer:", cnn.output()[0], "         The actual answer:", ttest[i])
