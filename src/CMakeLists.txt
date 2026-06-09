@@ -16,7 +16,8 @@ list(APPEND CMAKE_PREFIX_PATH ${pybind11_dir})
 find_package(Eigen3 5.0.0 REQUIRED NO_MODULE)
 find_package(pybind11 REQUIRED)
 
-pybind11_add_module(cmethods cmethods.cpp)
+pybind11_add_module(cmethods cmethods.cpp
+    cmethods.h)
 
 target_link_libraries(cmethods PRIVATE Eigen3::Eigen)
 target_link_options(cmethods PRIVATE

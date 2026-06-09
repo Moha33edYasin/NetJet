@@ -70,33 +70,29 @@ def zeros(shape):
     return np.zeros(shape)
 
 # activations
-def sigmoid(vec):
-   return 1 / (1 + np.exp(-vec))
+def sigmoid(x):
+   return 1 / (1 + np.exp(-x))
 
-def sigmoid_derivative(vec):
-    a = sigmoid(vec)
+def sigmoid_derivative(x):
+    a = sigmoid(x)
     return a * (1 - a)
 
-def softmax(vec):
-    vec_exp = np.exp(vec - np.max(vec, axis=1, keepdims=True))
+def softmax(x):
+    vec_exp = np.exp(x - np.max(x, axis=1, keepdims=True))
     return vec_exp / np.sum(vec_exp, axis=1, keepdims=True)
 
-def softmax_derivative(vec):
-    S = softmax(vec)
+def softmax_derivative(x):
+    S = softmax(x)
     dS = np.outer(-S, S) # issue
     diag_indices = np.diag_indices(dS.shape[1])
     dS[:, *diag_indices] += S
     return dS
 
-def ReLU(vec):
-    if isinstance(vec[0], (np.number, float, int)):
-        return np.maximum(0, vec)
-    return np.array([ReLU(r) for r in vec], dtype=float)
+def ReLU(x):
+    return np.maximum(0, x)
 
-def Leaky_ReLU(vec):
-    if isinstance(vec[0], (np.number, float, int)):
-        return np.maximum(0.1 * vec, vec)
-    return np.array([Leaky_ReLU(r) for r in vec])
+def Leaky_ReLU(x):
+    return np.maximum(0.1 * x, x)
 
 # Loss functions
 def MSE(o, y):
@@ -110,6 +106,11 @@ def CCE(o, y):
     return -np.sum(y * np.log(o + 1e-9), axis=1)
 
 # optimizers
+class SGD():
+    def __init__(self, lr=0.01):
+        self.lr = lr
+        self.func = lambda dw, db, l : (dw * lr, db * lr)
+
 class Momentem():
     def __init__(self, beta=0.9, lr=0.001):
         self.NL = 1

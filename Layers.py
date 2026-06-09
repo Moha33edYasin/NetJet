@@ -1,73 +1,120 @@
 import numpy as np
 from methods import align_and_pad, derivatives, ReLU, glorot_uniform, zeros 
 from build import cmethods
-from methods import images, show_grid
+from time import perf_counter
 
 ### Allocating Layer ###
 
 # Store 2D | 3D | 4D tensor 
 class Input():
-    def __init__(self, a):
+    def __init__(self, input_shape):
         self.previous = None
-        self.a = a
+        self.out_shape = input_shape
+        self.a = None
         self.z = None
         self.df = None
 
+    def activate(self, a):
+        self.a = a
+    
+    def update_batch_size(self, batch_size):
+        self.out_shape = (
+                batch_size,
+                self.out_shape[1],
+                self.out_shape[2],
+                self.out_shape[3]
+        )
+
 # 4D | 3D | 2D tensor --> 4D | 3D | 2D tensor
 class Reshape():
-    def __init__(self, shape=-1):
+    def __init__(self, shape):
         self.previous = None
         self.shape = shape
-        self.original_shape = None
+        self.out_shape = None
         self.df = None
         self.a = None
         self.z = None
     
-    # 3D | 2D | 1D tensor --> 3D | 2D | 1D tensor
-    def forward_pass(self, previous=None):
+    def fuse(self, previous):
         self.previous = previous
-        self.original_shape = previous.a.shape
         self.df = previous.df
-        self.a = previous.a.reshape(previous.a.shape[0], *self.shape)
-        self.z = previous.z.reshape(previous.z.shape[0], *self.shape)
+        self.out_shape = (
+                previous.out_shape[0],
+                self.shape[0],
+                self.shape[1],
+                self.shape[2]
+        )
+
+    def update_batch_size(self):
+        self.out_shape = (
+            self.previous.out_shape[0],
+            self.shape[0],
+            self.shape[1],
+            self.shape[2]
+        )
+
+    # 3D | 2D | 1D tensor --> 3D | 2D | 1D tensor
+    def forward_pass(self):
+        self.a = self.previous.a.reshape(self.previous.out_shape[0], *self.out_shape)
+
+        if self.previous.z is not None:
+            self.z = self.previous.z.reshape(self.previous.out_shape[0], *self.out_shape)
+        
         return self.a
 
     # 3D | 2D | 1D tensor <-- 3D | 2D | 1D tensor
     def backward_pass(self, dz):
-        return dz.reshape(dz.shape[0], *self.original_shape)
+        return dz.reshape(dz.shape[0], *self.previous.out_shape)
 
 # 4D | 3D tensor --> 2D tensor
 class Flatten():
     def __init__(self):
         self.previous = None
-        self.original_shape = None
+        self.out_shape = None
         self.df = None
-        self.n = 0
+        self.n = None
         self.a = None
         self.z = None
 
-    # 3D | 2D tensor --> 1D tensor
-    def forward_pass(self, previous):
+    def fuse(self, previous):
         self.previous = previous
-        self.original_shape = previous.a[0].shape
+        self.n = previous.out_shape[1] * previous.out_shape[2] * previous.out_shape[3]
+
+        self.out_shape = (
+            previous.out_shape[0], 
+            self.n
+        )
+
         self.df = previous.df
-        self.a = previous.a.reshape(previous.a.shape[0], -1)
-        self.z = previous.z.reshape(previous.z.shape[0], -1)
-        self.n = self.a[0].size
+
+    def update_batch_size(self):
+        self.out_shape = (
+            self.previous.out_shape[0], 
+            self.n
+        )
+
+    # 3D | 2D tensor --> 1D tensor
+    def forward_pass(self):
+        self.a = self.previous.a.reshape(self.previous.out_shape[0], -1)
+
+        if self.previous.z is not None:
+            self.z = self.previous.z.reshape(self.previous.out_shape[0], -1)
+        
         return self.a
     
     # 3D | 2D tensor <-- 1D tensor
     def backward_pass(self, dz):
-        return dz.reshape(dz.shape[0], *self.original_shape)
+        return dz.reshape(dz.shape[0], *self.previous.out_shape[1:])
 
 
 ### Trainable Layers ###
 
 # 2D tensor --> 2D tensor
 class Dense():
-    def __init__(self, n=0, activation=None, initializer_w=glorot_uniform, initializer_b=zeros):
+    def __init__(self, n, activation=None, initializer_w=glorot_uniform, initializer_b=zeros):
         self.n = n
         self.previous = None
+        self.out_shape = None
         self.a = None
         self.w = None
         self.b = None
@@ -78,16 +125,24 @@ class Dense():
         self.f_b = initializer_b
 
     # 1D tensor --> 1D tensor
-    def forward_pass(self, previous):
+    def fuse(self, previous):    
         self.previous = previous
-
-        # initialize weights and baises
-        if self.w is None:
-            # register these new pramaters
-            self.w, self.b = self.f_w(self.previous.n, self.n), self.f_b((self.n,))
+        self.out_shape = (previous.out_shape[0], self.n)
         
+        # initialize weights
+        if self.w is None:
+            self.w = self.f_w(self.previous.n, self.n)
+        
+        # initialize baises
+        if self.b is None:
+            self.b = self.f_b((self.n,))
+
+    def update_batch_size(self):
+        self.out_shape = (self.previous.out_shape[0], self.n)
+
+    def forward_pass(self):
         # calculate activations
-        self.z = previous.a @ self.w.T + self.b
+        self.z = self.previous.a @ self.w.T + self.b
         self.a = self.f(self.z)
         return self.a
 
@@ -101,27 +156,26 @@ class Dense():
         # a
         # |
         # |
-        dW = dz.T @ self.previous.a
-        dB = np.sum(dz, axis=0)
-        return dW, dB
+        dw = (dz.T @ self.previous.a) / self.out_shape[0]
+        db = np.sum(dz, axis=0) / self.out_shape[0]
+        return dw, db
 
     # 1D tensor <-- 1D tensor
     def backward_pass(self, dz):
-        # da = self.w.T @ dz
         da = dz @ self.w
         return da * self.previous.df(self.previous.z)
 
 # 4D tensor --> 4D tensor
 class Conv():
-    def __init__(self, n_kernels=1, k_shape=(1, 1), input_depth=None, stride=1, padding=0, activation=ReLU, initializer_w=glorot_uniform, initializer_b=zeros):
+    def __init__(self, n_kernels=1, k_shape=(1, 1), stride=1, padding=0, activation=ReLU, initializer_w=glorot_uniform, initializer_b=zeros):
         self.n_kernels = n_kernels
         self.k_shape = k_shape
-        self.depth = input_depth
         self.stride = stride
         self.pad = padding
 
         # store the previous element to form a hierarchy 
         self.previous = None
+        self.out_shape = None
 
         # functions
         self.f = activation
@@ -134,90 +188,161 @@ class Conv():
         self.b = None
         self.z = None
         self.a = None
+        self.pad_breadth = None
         self.padded_input = None
+        self.padded_shape = None
 
-        # wrappers
+        # math handlers
         self.x4d = None
         self.xT4d = None
         self.cT4d = None
 
-        # capcities
-        self.x4d_capcity = None
-        self.xT4d_capcity = None
-        self.cT4d_capcity = None
+        # algorithm
+        self.feed_algorithm = {}
+        self.grad_algorithm = {}
+        self.back_algorithm = {}
 
     # 3D tensor --> 3D tensor
-    def forward_pass(self, previous):
+    def fuse(self, previous):
+
         self.previous = previous
-        # use the depth of the previous activations as input depth
-        if not self.depth: self.depth = previous.a.shape[1]
+    
+        ''' calculate the output shape and the total padding '''
         
+        height = self.previous.out_shape[2] + 2 * self.pad
+        width = self.previous.out_shape[3] + 2 * self.pad
+        
+        # This corrects the input boundaries to align with kernel shape,
+        # so that the kernel can cover all the input with the least padding 
+        # room possible.
+        (u, d), (l, r) = align_and_pad((height, width), self.k_shape, self.stride)
+        self.pad_breadth = (0, 0), (0, 0), (u + self.pad, d + self.pad), (l + self.pad, r + self.pad)
+
+        input_height = u + d + height
+        input_width = l + r + width
+        
+        self.padded_shape = (
+                    previous.out_shape[0],
+                    previous.out_shape[1],
+                    input_height,
+                    input_width
+        )
+        
+        self.out_shape = (
+                    previous.out_shape[0],
+                    self.n_kernels,
+                    (input_height - self.k_shape[0]) // self.stride + 1, 
+                    (input_width - self.k_shape[1])  // self.stride + 1
+        )
+
         # initialize weights
         if self.w is None:
             self.w = np.array(
                 [
-                    [self.f_w(*self.k_shape) for _ in range(self.depth)]
+                    [self.f_w(*self.k_shape) for _ in range(previous.out_shape[1])]
                     for _ in range(self.n_kernels)
                 ],
                 dtype=float
             )
 
-        height = self.previous.a.shape[2] + 2 * self.pad
-        width = self.previous.a.shape[3] + 2 * self.pad
-        
-        # This corrects the input boundaries to align with kernel shape,
-        # so that the kernel will cover all the input with the least padding 
-        # room possible.
-        (u, d), (l, r) = align_and_pad((height, width), self.k_shape, self.stride)
-        pad_width = (0, 0), (0, 0), (u + self.pad, d + self.pad), (l + self.pad, r + self.pad)
-
-        self.padded_input = np.pad(self.previous.a, pad_width, mode='constant')
-        
-        if self.x4d is None:
-            self.x4d = cmethods.I2x_corr4D(*self.padded_input.shape, *self.w.shape, self.stride)
-            self.x4d_capcity = self.padded_input.shape
-
-        elif self.padded_input.shape != self.x4d_capcity:
-            self.x4d.alloc(*self.padded_input.shape, *self.w.shape, self.stride)
-            self.x4d_capcity = self.padded_input.shape
-            
-        out = self.x4d.cal(self.padded_input, self.w)
-
         # initialize baises
         if self.b is None:
-            self.b = self.f_b(out.shape[1:])
+            self.b = self.f_b(self.out_shape[1:])
+
+        # initialize C++ optimiztied methods
+        self.x4d = cmethods.I2x_corr4D(*self.padded_shape, *self.w.shape, self.stride)
+        self.xT4d = cmethods.I2x_corrT4D(*self.padded_shape, *self.out_shape, *self.k_shape, self.stride)
+        self.cT4d = cmethods.I2x_convT4D(*self.w.shape, *self.out_shape, *self.previous.out_shape[2:], self.stride)
         
-        self.z = self.b + out
+        if self.padded_shape not in self.feed_algorithm:
+            self.automate_algorithm_choices() 
+
+    def update_batch_size(self):
+        batch_size = self.previous.out_shape[0]
+        self.padded_shape = (
+                batch_size,
+                self.padded_shape[1],
+                self.padded_shape[2],
+                self.padded_shape[3]
+        )
+
+        self.out_shape = (
+                batch_size,
+                self.out_shape[1],
+                self.out_shape[2],
+                self.out_shape[3]
+        )
+        
+        self.x4d.update(batch_size)
+        self.xT4d.update(batch_size)
+        self.cT4d.update(batch_size)
+
+        if self.padded_shape not in self.feed_algorithm:
+            self.automate_algorithm_choices()
+
+    def automate_algorithm_choices(self):
+        a_in = np.random.randn(*self.padded_shape)
+        a_out = np.random.randn(*self.out_shape)
+
+        # benchmark forward pass (optimized loop vs. optimized GEMM)
+        t = perf_counter()
+        a_out = self.x4d.loop(a_in, self.w)
+        loop_elapsed_time = perf_counter() - t
+
+        t = perf_counter()
+        a_out = self.x4d.gemm(a_in, self.w)
+        gemm_elapsed_time = perf_counter() - t
+
+        if gemm_elapsed_time < loop_elapsed_time:
+            self.feed_algorithm[self.padded_shape] = self.x4d.gemm 
+        else:
+            self.feed_algorithm[self.padded_shape] = self.x4d.loop 
+
+        # benchmark gradient calculation (optimized loop vs. optimized GEMM)
+        t = perf_counter()
+        self.xT4d.loop(a_in, a_out)
+        loop_elapsed_time = perf_counter() - t
+        
+        t = perf_counter()
+        self.xT4d.gemm(a_in, a_out)
+        gemm_elapsed_time = perf_counter() - t
+
+        if gemm_elapsed_time < loop_elapsed_time:
+            self.grad_algorithm[self.padded_shape] = self.xT4d.gemm
+        else:
+            self.grad_algorithm[self.padded_shape] = self.xT4d.loop 
+        
+        # benchmark backward pass (optimized loop vs. optimized GEMM)
+        t = perf_counter()
+        self.cT4d.loop(self.w, a_out)
+        loop_elapsed_time = perf_counter() - t
+        
+        t = perf_counter()
+        self.cT4d.gemm(self.w, a_out)
+        gemm_elapsed_time = perf_counter() - t
+
+        if gemm_elapsed_time < loop_elapsed_time:
+            self.back_algorithm[self.padded_shape] = self.cT4d.gemm 
+        else:
+            self.back_algorithm[self.padded_shape] = self.cT4d.loop 
+
+    def forward_pass(self):
+        self.padded_input = np.pad(self.previous.a, self.pad_breadth, mode='constant')
+        self.z = self.feed_algorithm[self.padded_shape](self.padded_input, self.w) + self.b
         self.a = self.f(self.z)
-        
+
         return self.a
 
     def calculate_gradient(self, dz):
         # calculate the loss gradient with respect to the
         # weights and the biases for convolutional layer
-        if self.xT4d is None:
-            self.xT4d = cmethods.I2x_corrT4D(*self.padded_input.shape, *dz.shape, *self.k_shape, self.stride)
-            self.xT4d_capcity = dz.shape
-
-        elif dz.shape != self.xT4d_capcity:
-            self.xT4d.alloc(*self.padded_input.shape, *dz.shape, *self.k_shape, self.stride)
-            self.xT4d_capcity = dz.shape
-
-        dw = self.xT4d.cal(self.padded_input, dz)
-        db = np.sum(dz, axis=0)
+        dw = self.grad_algorithm[self.padded_shape](self.padded_input, dz) / self.out_shape[0]
+        db = np.sum(dz, axis=0) / self.out_shape[0]
         return dw, db
 
     # 3D tensor <-- 3D tensor
     def backward_pass(self, dz):
-        if self.cT4d is None:
-            self.cT4d = cmethods.I2x_convT4D(*self.w.shape, *dz.shape, *self.previous.a.shape[2:], self.stride)
-            self.cT4d_capcity = dz.shape
-        
-        elif dz.shape != self.cT4d_capcity:
-            self.cT4d.alloc(*self.w.shape, *dz.shape, *self.previous.a.shape[2:], self.stride)
-            self.cT4d_capcity = dz.shape
-
-        da = self.cT4d.cal(self.w, dz)
+        da = self.back_algorithm[self.padded_shape](self.w, dz)
         return da * self.previous.df(self.previous.z)
 
 
@@ -229,121 +354,223 @@ class MaxPool():
         self.size = size
         self.stride = stride
         self.previous = None
+        self.out_shape = None
 
         # activations
         self.df = None # copied from the previous layer
         
         # parameters
-        self.mask = None # to distribute the gradient based on each input contribution 
         self.a = None
         self.z = None
 
-    # 3D tensor --> 3D tensor
-    def forward_pass(self, previous):
+        # math handler
+        self.xp4D = None
+    
+    def fuse(self, previous):
         self.previous = previous
         self.df = previous.df
-        self.a, self.z, self.mask = cmethods.MaxPooling4D(previous.a, previous.z, *self.size, self.stride)
+
+        self.out_shape = (
+            previous.out_shape[0],
+            previous.out_shape[1],
+            (previous.out_shape[2] - self.size[0]) // self.stride + 1,
+            (previous.out_shape[3] - self.size[1]) // self.stride + 1
+        )
+
+        self.xp4D = cmethods.I2x_pool4D(*previous.out_shape, *self.size, self.stride)
+        
+    def update_batch_size(self):
+        batch_size = self.previous.out_shape[0]
+        
+        self.out_shape = (
+            batch_size,
+            *self.out_shape[1:]
+        )
+
+        self.xp4D.update(batch_size)
+
+    # 3D tensor --> 3D tensor
+    def forward_pass(self):
+        self.a, self.z = self.xp4D.max(self.previous.a, self.previous.z)
         return self.a
 
     # 3D tensor <-- 3D tensor
     def backward_pass(self, dz_next):
-        return cmethods.MaxMinPoolingTransposed4D(dz_next, self.mask, *self.size, self.stride)
+        return self.xp4D.distribute(dz_next)
 
-# 4D tensor --> 4D tensor
 class MinPool(MaxPool):
     # 3D tensor --> 3D tensor
-    def forward_pass(self, previous):
-        self.previous = previous
-        self.df = previous.df
-        self.a, self.z, self.mask = cmethods.MinPooling4D(previous.a, previous.z, *self.size, self.stride)
+    def forward_pass(self):
+        self.a, self.z = self.xp4D.min(self.previous.a, self.previous.z)
         return self.a
 
 # 4D tensor --> 4D tensor
 class AveragePool(MaxPool):
     # 3D tensor --> 3D tensor
-    def forward_pass(self, previous):
-        self.previous = previous
-        self.df = previous.df
-        self.a, self.z, self.mask = cmethods.AveragePooling4D(previous.a, previous.z, *self.size, self.stride)
+    def forward_pass(self):
+        self.a, self.z = self.xp4D.mean(self.previous.a, self.previous.z)
         return self.a
 
     # 3D tensor <-- 3D tensor
     def backward_pass(self, dz_next):
-        return cmethods.AveragePoolingTransposed4D(dz_next, *self.previous.a.shape[2:], *self.size, self.stride)
-
+        return self.xp4D.scaleup(dz_next)
+    
 # 4D tensor --> 4D tensor (the last dimension is single-elmenet array)
-class GlobalMaxPool():
-    def __init__(self, stride=1):
-        self.stride = stride
+class GlobalMaxPool(MaxPool):
+    def __init__(self):
+        self.size = None
         self.previous = None
+        self.out_shape = None
 
         # activations
         self.df = None # copied from the previous layer
         
         # parameters
-        self.mask = None # to distribute the gradient based on each input contribution 
         self.a = None
         self.z = None
 
-    # 3D tensor --> 1D tensor
-    def forward_pass(self, previous):
+        # wrapper
+        self.xp4D = None
+
+    def fuse(self, previous):
         self.previous = previous
         self.df = previous.df
-        self.a, self.z, self.mask = cmethods.MaxPooling4D(previous.a, previous.z, *previous.a.shape[2:], self.stride)
-        return self.a
+        self.size = previous.out_shape[2:]
+        
+        self.out_shape = (
+            previous.out_shape[0],
+            previous.out_shape[1],
+            1, 1
+        )
 
-    # 3D tensor <-- 1D tensor
-    def backward_pass(self, dz_next):
-        return cmethods.MaxMinPoolingTransposed4D(dz_next, self.mask, *self.previous.a.shape[2:], self.stride)
+        self.xp4D = cmethods.I2x_pool4D(*previous.out_shape, *self.size, 1)
 
 # 4D tensor --> 4D tensor (the last dimension is single-elmenet array)
-class GlobalMinPool(GlobalMaxPool):
+class GlobalMinPool(MinPool):
     # 3D tensor --> 3D tensor
-    def forward_pass(self, previous):
+    def __init__(self):
+        self.size = None
+        self.previous = None
+        self.out_shape = None
+
+        # activations
+        self.df = None # copied from the previous layer
+        
+        # parameters
+        self.a = None
+        self.z = None
+
+        # wrapper
+        self.xp4D = None
+
+    def fuse(self, previous):
         self.previous = previous
         self.df = previous.df
-        self.a, self.z, self.mask = cmethods.MinPooling4D(previous.a, previous.z, *previous.a.shape[2:], self.stride)
-        return self.a
+        self.size = previous.out_shape[2:]
+        
+        self.out_shape = (
+            previous.out_shape[0],
+            previous.out_shape[1],
+            1, 1
+        )
+
+        self.xp4D = cmethods.I2x_pool4D(*previous.out_shape, *self.size, 1)
 
 # 4D tensor --> 4D tensor (the last dimension is single-elmenet array)
-class GlobalAveragePool(GlobalMaxPool):
-    # 3D tensor --> 3D tensor
-    def forward_pass(self, previous):
+class GlobalAveragePool(AveragePool):
+    def __init__(self):
+        self.size = None
+        self.previous = None
+        self.out_shape = None
+
+        # activations
+        self.df = None # copied from the previous layer
+        
+        # parameters
+        self.a = None
+        self.z = None
+
+        # wrapper
+        self.xp4D = None
+
+    def fuse(self, previous):
         self.previous = previous
         self.df = previous.df
-        self.a, self.z = cmethods.AveragePooling4D(previous.a, previous.z, *previous.a.shape[2:], self.stride)
-        return self.a
+        self.size = previous.out_shape[2:]
+        
+        self.out_shape = (
+            previous.out_shape[0],
+            previous.out_shape[1],
+            1, 1
+        )
 
-    def backward_pass(self, dz_next):
-        size = self.previous.a.shape[2:]
-        return cmethods.AveragePoolingTransposed4D(dz_next, *size, *size, self.stride)
+        self.xp4D = cmethods.I2x_pool4D(*previous.out_shape, *self.size, 1)
 
 # 4D tensor --> 4D tensor
 class AdaptiveMaxPool(MaxPool):
-    def __init__(self, output_size=(1, 1)):
-        self.output_size = output_size
-        super().__init__()
+    def __init__(self, out_size=(1, 1), stride=1):
+        self.out_size = out_size
+        super().__init__(stride=stride)
 
-    def forward_pass(self, previous):
-        self.size = (previous.a.shape[0] - self.output_size[0] + 1, previous.a.shape[1] - self.output_size[1] + 1)
-        return super().forward_pass(previous)
+    def fuse(self, previous):
+        self.previous = previous
+        self.df = previous.df
+        
+        self.size = (
+            previous.out_shape[2] - (self.out_size[0] - 1) * self.stride, 
+            previous.out_shape[3] - (self.out_size[1] - 1) * self.stride, 
+        )
+
+        self.out_shape = (
+            previous.out_shape[0],
+            previous.out_shape[1],
+            *self.out_size,
+        )
+
+        self.xp4D = cmethods.I2x_pool4D(*previous.out_shape, *self.size, self.stride)
 
 # 4D tensor --> 4D tensor
 class AdaptiveMinPool(MinPool):
-    def __init__(self, output_size=(1, 1)):
-        self.output_size = output_size
-        super().__init__()
+    def __init__(self, out_size=(1, 1), stride=1):
+        self.out_size = out_size
+        super().__init__(stride=stride)
 
-    def forward_pass(self, previous):
-        self.size = (previous.a.shape[0] - self.output_size[0] + 1, previous.a.shape[1] - self.output_size[1] + 1)
-        return super().forward_pass(previous)
+    def fuse(self, previous):
+        self.previous = previous
+        self.df = previous.df
+        
+        self.size = (
+            previous.out_shape[2] - (self.out_size[0] - 1) * self.stride, 
+            previous.out_shape[3] - (self.out_size[1] - 1) * self.stride, 
+        )
+
+        self.out_shape = (
+            previous.out_shape[0],
+            previous.out_shape[1],
+            *self.out_size,
+        )
+
+        self.xp4D = cmethods.I2x_pool4D(*previous.out_shape, *self.size, self.stride)
 
 # 4D tensor --> 4D tensor
 class AdaptiveAveragePool(AveragePool):
-    def __init__(self, output_size=(1, 1)):
-        self.output_size = output_size
-        super().__init__()
+    def __init__(self, out_size=(1, 1), stride=1):
+        self.out_size = out_size
+        super().__init__(stride=stride)
 
-    def forward_pass(self, previous):
-        self.size = (previous.a.shape[0] - self.output_size[0] + 1, previous.a.shape[1] - self.output_size[1] + 1)
-        return super().forward_pass(previous)
+    def fuse(self, previous):
+        self.previous = previous
+        self.df = previous.df
+        
+        self.size = (
+            previous.out_shape[2] - (self.out_size[0] - 1) * self.stride, 
+            previous.out_shape[3] - (self.out_size[1] - 1) * self.stride, 
+        )
+
+        self.out_shape = (
+            previous.out_shape[0],
+            previous.out_shape[1],
+            *self.out_size,
+        )
+
+        self.xp4D = cmethods.I2x_pool4D(*previous.out_shape, *self.size, self.stride)
