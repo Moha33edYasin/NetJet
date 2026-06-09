@@ -1,6 +1,6 @@
 # What is it?
 
-A **neural network framework** implemented entirely from scratch. It reconstructs fundamental deep learning components, including _convolution kernels, pooling operations, dense-to-convolution auto transitions, channel handling, optimizers, activation functions, and parameter initialization strategies_.  
+A **neural network framework** implemented entirely from scratch. It reconstructs fundamental deep learning components, including _convolution kernels, pooling operations, auto-selecting for the optimal convolution algorithm, channel handling, optimizers, activation functions, and parameter initialization strategies_.  
 
 The framework emphasizes **modularity, transparency, and user control**, enabling direct inspection and control of the learning mechanics.  
 
@@ -16,6 +16,8 @@ Re-implementing core mechanisms provides deeper insight into learning dynamics, 
 - CMake  
 - pybind11
 - Eigen 5.0.0
+- numpy
+- matplotlib
 
 Then, type:  
 ```bash
@@ -46,24 +48,52 @@ mlp = nn(
         Flatten(),
         Dense(16, ReLU),
         Dense(16, ReLU),
-        Dense(10, softmax),
+        Dense(10, softmax)
+)
+```
+
+compile the model:  
+```python
+mlp.compile(
+        input_shape=(128, 1, 28, 28), # (batch_size, channels, height, width)
         possible_outcomes=['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
-        cost= CCE, # cross categorical entropy
+        cost= CCE, # Cross Categorical Entropy
         optimizer= Adam(lr=0.001)
 )
-```  
-
+```
+you would see something like this:
+```bash
+(25%) : fused Flatten (0) --> Input Node.
+(50%) : fused Dense (1) --> Flatten (0).
+...
+(100%) : fused ...
+Adam optimization is configured.
+(*) The network is compiled successfully.       (0.01s)
+```
 Train the model:  
 ```python
-loss1, acc1 = mlp.learn(xtrain, ytrain, ttrain, epochs=8, batch_size=128)
-```  
+loss1, acc1 = mlp.learn(xtrain, ytrain, ttrain, epochs=8)
+```
+```bash
+(#) accuracy per epoch (1): 78.66%       (2.03s)
+(#) accuracy per epoch (2): 92.11%       (2.07s)
+...
+(#) accuracy per epoch (...): ...%       (~2.0s)
+(*) Training is complete.       (16.53s)
+```
+
+Also you can inspect your training by setting `Debug_plot=True` in `learn`:  
+<img width="930" height="376" alt="Python 3 11 6_9_2026 2_20_54 PM" src="https://github.com/user-attachments/assets/77c9f3e5-2719-4b5d-8f3b-de65018fa011" />
+
+> [!NOTE]
+> Enabling `Debug_plot` can increase learning time, so use it wisely to refine your model.
 
 Evaluate on test data:  
 ```python
-loss2, acc2 = mlp.test(xtest, ytest, ttest, batch_size=128)
-```  
+loss2, acc2 = mlp.test(xtest, ytest, ttest)
+```
 > [!NOTE]
-> * The above structure achieved `~0.94-0.95` testing accuarcy on MNIST.  
+> * The above structure achieved `~94-95%` testing accuarcy on MNIST.  
 > * `Dense`, `Flatten`, and `Reshape` layers are relatively fast.  
 
 To use convolutional layers:  
@@ -75,21 +105,48 @@ cnn = nn(
             MaxPool((2, 2)),
             Flatten(),
             Dense(16, ReLU),
-            Dense(10, softmax),
-            possible_outcomes=['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
-            cost= CCE,
-            optimizer= Adam(lr=0.001)
+            Dense(10, softmax)
 )
+
 ```  
 > [!NOTE]
-> With `8 epochs` and a `batch size` of `128`, The above structure achieved `~0.97-0.97.6` testing accuarcy on MNIST.  
-
-> [!WARNING]
-> Convolution and pooling operations are not yet fully optimized and may run slower than usual.  
+> * With `8 epochs`, a `batch size` of `128` and `Adam`, The above structure achieved `~96-97%` testing accuarcy on MNIST (~15s/epoch).  
+> * Convolution and pooling operations are now moderately faster.  
 
 ---
+# Built-in Layers
+- Dense Layers: `Dense(number of neuron, activation, weight_initailization, biases_initailization)`  
+- Convolutional Layers: `Conv(number of kernels, kernel shape, padding, stride, activation, weight_initailization, biases_initailization)`  
+- Flatten Layer: `Flatten()`  
+- Reshape Layer: `Reshape(2d shape)`  
+- Max pooling: `Maxpool(2d shape, stride)`  
+- Min pooling: `Minpool(2d shape, stride)`  
+- Average pooling: `Averagepool(2d shape, stride)`  
+- Global max pooling: `GlobalMaxPool()`  
+- Global min pooling: `GlobalMinPool()`  
+- Global average pooling: `GlobalAveragePool()`  
+- Adaptive max pooling: `AdaptiveMaxPool(2d out_shape, stride)`  
+- Adaptive min pooling: `AdaptiveMinPool(2d out_shape, stride)`  
+- Adaptive average pooling: `AdaptiveAveragePool(2d out_shape, stride)`
 
-For more examples, you may refer to `mnist_test.py` in `examples` and run it using:  
+# Built-in initialization techniques
+- He initialization :`he_normal`, `he_uniform`  
+- Glorot initialization: `glorot_normal`, `glorot_uniform`  
+- Zero initialization: `zeros`
+ 
+# Built-in activation functions
+- `sigmoid`, `softmax`, `ReLU`, `Leaky_ReLU`  
+
+# Built-in Cost functions
+- `MSE` : Mean Squared Error  
+- `BCE` : Binary Cross Entropy  
+- `CCE`: Cross Categorical Entropy
+- 
+# Built-in Optimizers
+- `SGD`, `Momentem`, `Nestrov_A`, `AdaGrad`, `AdaDelta`, `RMSProp`, `AdaMax`, `Adam`, `nAdam`, and `AMSGrad`  
+
+---
+For more examples, you may experiment with `mnist_test.py` in `examples` and run it using:  
 ```bash
 python -m examples.mnist_test
 ```
