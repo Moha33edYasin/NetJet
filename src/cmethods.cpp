@@ -1,14 +1,3 @@
-/*
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h> 
-#include <pybind11/eigen.h>
-#include <execution>
-#include <tuple>
-
-namespace py = pybind11;
-using RowMatrixXd = Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
-using ArrayXd = py::array_t<float, py::array::c_style | py::array::forcecast>;
-*/
 #include "cmethods.h"
 
 I2x4D::I2x4D(int a_s0, int a_s1, int a_s2, int a_s3, 
