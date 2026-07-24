@@ -141,7 +141,7 @@ cnn = nn(
 - `MSE` : Mean Squared Error  
 - `BCE` : Binary Cross Entropy  
 - `CCE`: Cross Categorical Entropy
-- 
+
 # Built-in Optimizers
 - `SGD`, `Momentem`, `Nestrov_A`, `AdaGrad`, `AdaDelta`, `RMSProp`, `AdaMax`, `Adam`, `nAdam`, and `AMSGrad`  
 
